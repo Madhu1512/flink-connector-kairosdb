@@ -7,7 +7,7 @@ public class KairosdbParser {
     public final String name;
     public final Map<String, String> tags;
     public final long time;
-    public final Object value;;
+    public final Object value;
 
     public KairosdbParser(String name, Map<String, String> tags, long time, Object value) {
         this.name = name;
