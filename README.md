@@ -1,1 +1,3 @@
-# flink-connector-kairosdb 
+# flink-connector-kairosdb
+
+This Connector is still under Development...
