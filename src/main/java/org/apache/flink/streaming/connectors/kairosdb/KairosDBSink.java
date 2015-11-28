@@ -39,7 +39,7 @@ public class KairosDBSink<T> extends RichSinkFunction<T> {
     public void open(Configuration configuration) throws InterruptedException {
         ParameterTool params = ParameterTool.fromMap(userConfig);
         try {
-            kairosdbClient = new HttpClient("http://" + params.get("KariosDB.host") + ":" + Integer.parseInt("KariosDB.port"));
+            kairosdbClient = new HttpClient("http://" + params.get("KariosDB.host") + ":" + params.getInt("KariosDB.port"));
         } catch (MalformedURLException e) {
             LOG.error("Kairos DB reported error, Malformed URL Error Exception" + e);
         }
@@ -63,11 +63,10 @@ public class KairosDBSink<T> extends RichSinkFunction<T> {
             Response response = kairosdbClient.pushMetrics(metricBuilder);
 
             //check if response is ok
-            if (response.getStatusCode() != 200) {
-                LOG.error("Kairos DB reported error. Status code: " + response.getStatusCode());
-                LOG.error("Error message: " + response.getErrors());
-            } else {
-                LOG.debug("Kairos DB returned OK. Status code: " + response.getStatusCode());
+            if(response.getErrors().size()>0){
+                for(String e : response.getErrors()) {
+                    LOG.error("KairosDB Response error:" + e);
+                }
             }
         } catch (IOException e) {
             LOG.error("Could not request KairosDB.", e);
