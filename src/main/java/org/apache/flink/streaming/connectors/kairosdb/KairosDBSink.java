@@ -1,5 +1,7 @@
 package org.apache.flink.streaming.connectors.kairosdb;
 
+import org.apache.flink.api.java.utils.ParameterTool;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
 import org.kairosdb.client.HttpClient;
 import org.kairosdb.client.builder.MetricBuilder;
@@ -14,16 +16,15 @@ import java.util.Map;
 
 public class KairosDBSink<T> extends RichSinkFunction<T> {
     private static final Logger LOG = LoggerFactory.getLogger(KairosDBSink.class);
+    /**
+     * The client for communicating with KairosDB.
+     */
+    private HttpClient kairosdbClient;
 
     /**
-     * The server of the kairos db.
+     * The user specified config map that we forward to Elasticsearch when we create the Client.
      */
-    protected final String server;
-    /**
-     * The port of the kairos db.
-     */
-    protected final int port;
-
+    private final Map<String, String> userConfig;
 
     /**
      * The builder that is used to construct an  from the incoming element.
@@ -32,10 +33,18 @@ public class KairosDBSink<T> extends RichSinkFunction<T> {
 
     public KairosDBSink(Map<String, String> userConfig, KairosdbRequestBuilder<T> kairosdbRequestBuilder){
         this.kairosdbRequestBuilder = kairosdbRequestBuilder;
-        this.server = userConfig.get("kairosdb.server");
-        this.port = Integer.parseInt(userConfig.get("port"));
-
+        this.userConfig = userConfig;
     }
+
+    public void open(Configuration configuration) throws InterruptedException {
+        ParameterTool params = ParameterTool.fromMap(userConfig);
+        try {
+            kairosdbClient = new HttpClient("http://" + params.get("KariosDB.host") + ":" + Integer.parseInt("KariosDB.port"));
+        } catch (MalformedURLException e) {
+            LOG.error("Kairos DB reported error, Malformed URL Error Exception" + e);
+        }
+    }
+
     @Override
     public void invoke(T element) throws Exception {
         KairosdbParser parser = kairosdbRequestBuilder.parse(element, getRuntimeContext());
@@ -51,8 +60,7 @@ public class KairosDBSink<T> extends RichSinkFunction<T> {
 
     private void sendMetric(MetricBuilder metricBuilder) {
         try {
-            HttpClient client = new HttpClient("http://" + this.server + ":" + this.port);
-            Response response = client.pushMetrics(metricBuilder);
+            Response response = kairosdbClient.pushMetrics(metricBuilder);
 
             //check if response is ok
             if (response.getStatusCode() != 200) {
@@ -61,13 +69,20 @@ public class KairosDBSink<T> extends RichSinkFunction<T> {
             } else {
                 LOG.debug("Kairos DB returned OK. Status code: " + response.getStatusCode());
             }
-            client.shutdown();
-        } catch (MalformedURLException e) {
-            LOG.error("Kairos DB reported error, Malformed URL Error Exception" + e);
         } catch (IOException e) {
             LOG.error("Could not request KairosDB.", e);
         } catch (URISyntaxException e) {
             LOG.error("Kairos DB reported error,URI Syntax Error Exception" + e);
+        }
+    }
+
+    public void close(){
+        if (kairosdbClient != null){
+            try {
+                kairosdbClient.shutdown();
+            } catch (IOException e) {
+                LOG.error("Kairos DB reported error, IO Exception" + e);
+            }
         }
     }
 
